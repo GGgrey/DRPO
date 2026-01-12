@@ -3,9 +3,10 @@ set -x
 export RAY_TMPDIR="/workspace/verl_exp/"
 export WANDB_API_KEY=37f371d2968f35d69749ee52089583eb8e1f0cab
 export WANDB_DIR="/workspace/verl_exp/"
+export WANDB_MODE=offline
 export ACCELERATE_LOG_LEVEL=info
 export HYDRA_FULL_ERROR=1
-export CUDA_VISIBLE_DEVICES="6,7"
+export CUDA_VISIBLE_DEVICES="0,1"
 
 # Data config
 train_prompt_bsz=128
@@ -52,7 +53,7 @@ exp_name="GRPO-Qwen2.5-1.5B"
 save_freq=30
 test_freq=10
 total_epochs=1
-resume_mode=auto
+resume_mode=disable
 
 # Ray
 RAY_ADDRESS=${RAY_ADDRESS:-"http://localhost:8265"}
