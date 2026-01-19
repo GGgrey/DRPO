@@ -9,3 +9,13 @@ defaults:
 trainer:
   project_name: verl-drpo
   type: drpo
+
+client:
+  mode: api
+  local_path: models/Qwen/Qwen2.5-1.5B
+  api_key: sk-ae06b64c707d4e0d902a57b0b5b49956
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  client_model: qwen3-max
+  temperature: 0.3
+  top_p: 0.95
+  max_tokens: 512

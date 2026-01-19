@@ -1,0 +1,22 @@
+model_parameters:
+  model_name: "/models/Qwen/Qwen2.5-1.5B"
+  dtype: "bfloat16"
+  tensor_parallel_size: 1
+  data_parallel_size: 1
+  pipeline_parallel_size: 1
+  gpu_memory_utilization: 0.8
+  max_model_length: 5120
+  swap_space: 4
+  seed: 42
+  generation_parameters:
+    presence_penalty: 0.0
+    repetition_penalty: 1.0
+    frequency_penalty: 0.0
+    temperature: 1.0
+    top_k: null
+    min_p: 0.0
+    top_p: 0.95
+    seed: 42
+    stop_tokens: null
+    max_new_tokens: 4096
+    min_new_tokens: 0
