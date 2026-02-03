@@ -48,12 +48,12 @@ n_resp_per_prompt=8
 critic_warmup=0
 val_before_train=False
 n_gpus_per_node=4
-project_name="GRPO"
-exp_name="GRPO-Qwen2.5-1.5B"
+project_name="DRPO"
+exp_name="DRPO-Qwen2.5-1.5B"
 save_freq=30
 test_freq=10
 total_epochs=1
-resume_mode=disable
+resume_mode=auto
 
 # Ray
 RAY_ADDRESS=${RAY_ADDRESS:-"http://localhost:8265"}

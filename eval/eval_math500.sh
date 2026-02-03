@@ -18,7 +18,7 @@ echo "NUM_GPU_PER_NODE: ${NUM_GPU_PER_NODE}"
 total_start_time=$(date +"%Y-%m-%d %H:%M:%S")
 echo "Total start time: $total_start_time"
 
-MODEL=/root/siton-data-0072803f053947c8bb3fe64d115b30e3/models/Qwen/Qwen2.5-1.5B
+MODEL=/root/siton-data-0072803f053947c8bb3fe64d115b30e3/verl_exp/ckpts/Qwen2.5-1.5B-DRPO-Math-1Epoch
 OUTPUT_DIR=./eval
 CUSTOM_TASKS_PATH=./eval/custom_tasks/eval_all.py
 

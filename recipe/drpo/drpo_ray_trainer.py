@@ -20,6 +20,7 @@ This trainer supports model-agonistic model initialization with huggingface
 
 import json
 import re
+import time
 import uuid
 from collections import defaultdict
 from copy import deepcopy
@@ -271,6 +272,34 @@ class RayDRPOTrainer(RayPPOTrainer):
         
         return prompt, ground_truth
 
+    def _call_api(self, input_str: str):
+        max_retries = 100
+        sleep_time = 10.0
+        
+        for attempt in range(max_retries):
+            try:
+                completion = self.client.chat.completions.create(
+                    model=self.client_model,
+                    messages=[
+                        {"role": "user", "content": input_str},
+                    ],
+                    temperature=self.temperature,
+                    top_p=self.top_p,
+                    max_tokens=self.max_tokens,
+                    response_format={"type": "json_object"}
+                )
+
+                return completion.choices[0].message.content
+
+            except Exception as e:
+                print(f"API call failed on attempt {attempt + 1}/{max_retries}: {e}")
+                time.sleep(sleep_time)
+                continue
+        
+        print("Max retries reached, API call failed")
+        
+        return None
+
     def _adjust_difficulty(self, batch: DataProto, wrong_problems: dict, wrong_gts: dict, wrong_idxs: dict, correct_problems: dict, correct_gts: dict, correct_idxs: dict):
 
         adjust_prompts = {}
@@ -279,18 +308,8 @@ class RayDRPOTrainer(RayPPOTrainer):
         # Adjust wrong problems by decomposition
         for uid, ori_problem in wrong_problems.items():
             ori_answer = wrong_gts[uid]
-            input = self.decompose_prompt.format(problem=ori_problem, answer=ori_answer)
-            completion = self.client.chat.completions.create(
-                model=self.client_model,
-                messages=[
-                    {"role": "user", "content": input},
-                ],
-                temperature=self.temperature,
-                top_p=self.top_p,
-                max_tokens=self.max_tokens,
-                response_format={"type": "json_object"}
-            )
-            output_str = completion.choices[0].message.content
+            input_str = self.decompose_prompt.format(problem=ori_problem, answer=ori_answer)
+            output_str = self._call_api(input_str)
 
             try:
                 output_json = json.loads(output_str)
@@ -300,7 +319,8 @@ class RayDRPOTrainer(RayPPOTrainer):
                 else:
                     adjust_prompts[uid] = ori_problem
                     adjust_gts[uid] = ori_answer
-            except json.JSONDecodeError:
+            except Exception as e:
+                print(f"Failed to parse output: {e}")
                 if uid not in adjust_prompts:
                     adjust_prompts[uid] = ori_problem
                     adjust_gts[uid] = ori_answer
@@ -308,18 +328,8 @@ class RayDRPOTrainer(RayPPOTrainer):
         # Adjust correct problems by rephrasing and attacking
         for uid, ori_problem in correct_problems.items():
             ori_answer = correct_gts[uid]
-            input = self.hybrid_prompt.format(problem=ori_problem, answer=ori_answer)
-            completion = self.client.chat.completions.create(
-                model=self.client_model,
-                messages=[
-                    {"role": "user", "content": input},
-                ],
-                temperature=self.temperature,
-                top_p=self.top_p,
-                max_tokens=self.max_tokens,
-                response_format={"type": "json_object"}
-            )
-            output_str = completion.choices[0].message.content
+            input_str = self.hybrid_prompt.format(problem=ori_problem, answer=ori_answer)
+            output_str = self._call_api(input_str)
 
             try:
                 output_json = json.loads(output_str)
@@ -329,7 +339,8 @@ class RayDRPOTrainer(RayPPOTrainer):
                 else:
                     adjust_prompts[uid] = ori_problem
                     adjust_gts[uid] = ori_answer
-            except json.JSONDecodeError:
+            except Exception as e:
+                print(f"Failed to parse output: {e}")
                 if uid not in adjust_prompts:
                     adjust_prompts[uid] = ori_problem
                     adjust_gts[uid] = ori_answer
@@ -491,6 +502,48 @@ class RayDRPOTrainer(RayPPOTrainer):
                             continue
                         batch.meta_info[key][ori_idx] = adjust_batch.meta_info[key][idx * len(idxs) + offset]
 
+    def _collect_uids_by_accuracy(self, batch: DataProto, metrics: dict, prefix: str):
+        scores = batch.batch["reward_tensor"].sum(dim=-1)
+        uid_list = batch.non_tensor_batch["uid"]
+
+        uid2score = defaultdict(list)
+        uid2acc = {}
+
+        bsz = scores.shape[0]
+        if len(uid_list) != bsz:
+            raise ValueError(f"uid_list length {len(uid_list)} != batch size {bsz}")
+
+        for i in range(bsz):
+            uid2score[uid_list[i]].append(scores[i])
+        for uid in uid2score:
+            if len(uid2score[uid]) < 1:
+                raise ValueError(f"No score in prompt uid: {uid}")
+            scores_tensor = torch.stack(uid2score[uid])
+            uid2acc[uid] = torch.mean(scores_tensor)
+
+        all_wrong_uids = []
+        all_correct_uids = []
+        valid_uids = []
+        total_count = len(uid2acc)
+        eps = 1e-6
+        for uid, acc in uid2acc.items():
+            if acc <= 0.0 + eps:
+                all_wrong_uids.append(uid)
+            elif acc >= 1.0 - eps:
+                all_correct_uids.append(uid)
+            else:
+                valid_uids.append(uid)
+
+        all_wrong_count = len(all_wrong_uids)
+        all_correct_count = len(all_correct_uids)
+        valid_count = len(valid_uids)
+        metrics[f"batch_info/total_count_{prefix}"] = total_count
+        metrics[f"batch_info/all_wrong_count_{prefix}"] = all_wrong_count
+        metrics[f"batch_info/all_correct_count_{prefix}"] = all_correct_count
+        metrics[f"batch_info/valid_count_{prefix}"] = valid_count
+        
+        return uid2acc, all_wrong_uids, all_correct_uids, valid_uids, total_count
+
     def fit(self):
         from omegaconf import OmegaConf
         from verl.utils.tracking import Tracking
@@ -629,63 +682,28 @@ class RayDRPOTrainer(RayPPOTrainer):
                         reward_tensor, reward_extra_infos_dict = compute_reward(batch, self.reward_fn)
 
                     if not self.use_rm:
-                        with marked_timer("adjust", timing_raw):
+                        with marked_timer("adjust_difficulty", timing_raw):
                             batch.batch["reward_tensor"] = reward_tensor
-                            scores = batch.batch["reward_tensor"].sum(dim=-1)
                             uid_list = batch.non_tensor_batch["uid"]
+                            _, all_wrong_uids, all_correct_uids, valid_uids, total_count = self._collect_uids_by_accuracy(batch, metrics, prefix="before_adjust")
 
-                            uid2score = defaultdict(list)
-                            uid2acc = {}
+                            if len(valid_uids) != total_count:
+                                uid2wrong_idxs = defaultdict(list)
+                                uid2correct_idxs = defaultdict(list)
+                                uid2wrong_problem, uid2wrong_gt = {}, {}
+                                uid2correct_problem, uid2correct_gt = {}, {}
+                                for idx, uid in enumerate(uid_list):
+                                    if uid in all_wrong_uids:
+                                        uid2wrong_idxs[uid].append(idx)
+                                        if uid not in uid2wrong_problem:
+                                            uid2wrong_problem[uid], uid2wrong_gt[uid] = self._decode_sample_by_index(batch, idx)
+                                    if uid in all_correct_uids:
+                                        uid2correct_idxs[uid].append(idx)
+                                        if uid not in uid2correct_problem:
+                                            uid2correct_problem[uid], uid2correct_gt[uid] = self._decode_sample_by_index(batch, idx)
 
-                            bsz = scores.shape[0]
-                            if len(uid_list) != bsz:
-                                raise ValueError(f"uid_list length {len(uid_list)} != batch size {bsz}")
-
-                            for i in range(bsz):
-                                uid2score[uid_list[i]].append(scores[i])
-                            for uid in uid2score:
-                                if len(uid2score[uid]) < 1:
-                                    raise ValueError(f"No score in prompt uid: {uid}")
-                                scores_tensor = torch.stack(uid2score[uid])
-                                uid2acc[uid] = torch.mean(scores_tensor)
-                        
-                            all_wrong_uids = []
-                            all_correct_uids = []
-                            all_valid_uids = []
-                            total_count = len(uid2acc)
-                            eps = 1e-6
-                            for uid, acc in uid2acc.items():
-                                if acc <= 0.0:
-                                    all_wrong_uids.append(uid)
-                                elif acc >= 1.0 - eps:
-                                    all_correct_uids.append(uid)
-                                else:
-                                    all_valid_uids.append(uid)
-                            all_wrong_count = len(all_wrong_uids)
-                            all_correct_count = len(all_correct_uids)
-                            all_valid_count = len(all_valid_uids)
-
-                            metrics["batch_info/total_count"] = total_count
-                            metrics["batch_info/all_wrong_count"] = all_wrong_count
-                            metrics["batch_info/all_correct_count"] = all_correct_count
-                            metrics["batch_info/all_valid_count"] = all_valid_count
-
-                            uid2wrong_idxs = defaultdict(list)
-                            uid2correct_idxs = defaultdict(list)
-                            uid2wrong_problem, uid2wrong_gt = {}, {}
-                            uid2correct_problem, uid2correct_gt = {}, {}
-                            for idx, uid in enumerate(uid_list):
-                                if uid in all_wrong_uids:
-                                    uid2wrong_idxs[uid].append(idx)
-                                    if uid not in uid2wrong_problem:
-                                        uid2wrong_problem[uid], uid2wrong_gt[uid] = self._decode_sample_by_index(batch, idx)
-                                if uid in all_correct_uids:
-                                    uid2correct_idxs[uid].append(idx)
-                                    if uid not in uid2correct_problem:
-                                        uid2correct_problem[uid], uid2correct_gt[uid] = self._decode_sample_by_index(batch, idx)
-
-                            if all_valid_count != total_count:
                                 self._adjust_difficulty(batch, uid2wrong_problem, uid2wrong_gt, uid2wrong_idxs, uid2correct_problem, uid2correct_gt, uid2correct_idxs)
+                                self._collect_uids_by_accuracy(batch, metrics, prefix="after_adjust")
 
                     # Operating Mode Selection:
                     # - Bypass mode: Sets old_log_probs = rollout_log_probs (2 policies: π_rollout, π_θ)
