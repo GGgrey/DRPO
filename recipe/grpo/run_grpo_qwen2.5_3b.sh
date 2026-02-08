@@ -49,7 +49,7 @@ critic_warmup=0
 val_before_train=False
 n_gpus_per_node=4
 project_name="GRPO"
-exp_name="GRPO-Qwen2.5-1.5B"
+exp_name="GRPO-Qwen2.5-3B"
 save_freq=30
 test_freq=10
 total_epochs=1
@@ -63,7 +63,7 @@ NNODES=${NNODES:-1}
 
 # Paths
 RAY_DATA_HOME=${RAY_DATA_HOME:-"/root/siton-data-0072803f053947c8bb3fe64d115b30e3/verl_exp"}
-MODEL_PATH=${MODEL_PATH:-"/root/siton-data-0072803f053947c8bb3fe64d115b30e3/models/Qwen/Qwen2.5-1.5B"}
+MODEL_PATH=${MODEL_PATH:-"/root/siton-data-0072803f053947c8bb3fe64d115b30e3/models/Qwen/Qwen2.5-3B"}
 CKPTS_DIR=${CKPTS_DIR:-"${RAY_DATA_HOME}/ckpts/${project_name}/${exp_name}"}
 TRAIN_FILE=${TRAIN_FILE:-"${RAY_DATA_HOME}/data/math/train.parquet"}
 TEST_FILE=${TEST_FILE:-"${RAY_DATA_HOME}/data/math/test.parquet"}

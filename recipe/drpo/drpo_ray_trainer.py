@@ -537,10 +537,10 @@ class RayDRPOTrainer(RayPPOTrainer):
         all_wrong_count = len(all_wrong_uids)
         all_correct_count = len(all_correct_uids)
         valid_count = len(valid_uids)
-        metrics[f"batch_info/total_count_{prefix}"] = total_count
-        metrics[f"batch_info/all_wrong_count_{prefix}"] = all_wrong_count
-        metrics[f"batch_info/all_correct_count_{prefix}"] = all_correct_count
-        metrics[f"batch_info/valid_count_{prefix}"] = valid_count
+        metrics[f"rollout_info/total_count_{prefix}"] = total_count
+        metrics[f"rollout_info/all_wrong_count_{prefix}"] = all_wrong_count
+        metrics[f"rollout_info/all_correct_count_{prefix}"] = all_correct_count
+        metrics[f"rollout_info/valid_count_{prefix}"] = valid_count
         
         return uid2acc, all_wrong_uids, all_correct_uids, valid_uids, total_count
 

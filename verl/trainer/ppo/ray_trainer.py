@@ -1161,6 +1161,46 @@ class RayPPOTrainer:
                         if reward_extra_infos_dict:
                             batch.non_tensor_batch.update({k: np.array(v) for k, v in reward_extra_infos_dict.items()})
 
+                        if not self.use_rm:
+                            scores = batch.batch["token_level_scores"].sum(dim=-1)
+                            uid_list = batch.non_tensor_batch["uid"]
+
+                            uid2score = defaultdict(list)
+                            uid2acc = {}
+
+                            bsz = scores.shape[0]
+                            if len(uid_list) != bsz:
+                                raise ValueError(f"uid_list length {len(uid_list)} != batch size {bsz}")
+
+                            for i in range(bsz):
+                                uid2score[uid_list[i]].append(scores[i])
+                            for uid in uid2score:
+                                if len(uid2score[uid]) < 1:
+                                    raise ValueError(f"No score in prompt uid: {uid}")
+                                scores_tensor = torch.stack(uid2score[uid])
+                                uid2acc[uid] = torch.mean(scores_tensor)
+
+                            all_wrong_uids = []
+                            all_correct_uids = []
+                            valid_uids = []
+                            total_count = len(uid2acc)
+                            eps = 1e-6
+                            for uid, acc in uid2acc.items():
+                                if acc <= 0.0 + eps:
+                                    all_wrong_uids.append(uid)
+                                elif acc >= 1.0 - eps:
+                                    all_correct_uids.append(uid)
+                                else:
+                                    valid_uids.append(uid)
+
+                            all_wrong_count = len(all_wrong_uids)
+                            all_correct_count = len(all_correct_uids)
+                            valid_count = len(valid_uids)
+                            metrics["rollout_info/total_count"] = total_count
+                            metrics["rollout_info/all_wrong_count"] = all_wrong_count
+                            metrics["rollout_info/all_correct_count"] = all_correct_count
+                            metrics["rollout_info/valid_count"] = valid_count
+
                         # compute rewards. apply_kl_penalty if available
                         if self.config.algorithm.use_kl_in_reward:
                             batch, kl_metrics = apply_kl_penalty(
