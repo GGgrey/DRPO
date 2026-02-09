@@ -61,6 +61,9 @@ class RayDRPOTrainer(RayPPOTrainer):
         self.apply_chat_template_kwargs = getattr(data_cfg, "apply_chat_template_kwargs", {})
         self.truncation = getattr(data_cfg, "truncation", "error")
 
+        algorithm_cfg = getattr(self.config, "algorithm", {})
+        self.max_iter = int(getattr(algorithm_cfg, "max_iter", 5))
+
         client_cfg = getattr(self.config, "client", {})
         self.api_key = getattr(client_cfg, "api_key", "")
         self.base_url = getattr(client_cfg, "base_url", "")
@@ -77,7 +80,7 @@ class RayDRPOTrainer(RayPPOTrainer):
             "You are an expert in designing mathematical problems. Your objective is to rephrase a given problem "
             "to create a linguistic variant, ensuring the underlying logic and requirements remain identical.\n\n"
             "[TASK]\n"
-            "Given the ORIGINAL_PROBLEM and ORIGINAL_ANSWER below, produce a AUGMENTED_PROBLEM. You should rewrite the text by changing "
+            "Given the ORIGINAL_PROBLEM and ORIGINAL_ANSWER below, produce a REWRITTEN_PROBLEM. You should rewrite the text by changing "
             "sentence structure, vocabulary, tone, or formatting. You may convert a wordy problem into a concise one, "
             "or expand a dense problem into a more descriptive one, as long as the meaning is preserved.\n"
             "**Output ONLY the rewritten problem text directly.**\n\n"
@@ -112,7 +115,7 @@ class RayDRPOTrainer(RayPPOTrainer):
             "You are an expert in designing mathematical problems. Your objective is to create a variant of a given problem "
             "by injecting irrelevant context, ensuring the core task remains identical.\n\n"
             "[TASK]\n"
-            "Given the ORIGINAL_PROBLEM and ORIGINAL_ANSWER below, produce an AUGMENTED_PROBLEM that includes additional context. "
+            "Given the ORIGINAL_PROBLEM and ORIGINAL_ANSWER below, produce an REWRITTEN_PROBLEM that includes additional context. "
             "The added context should appear topically related (e.g., alternative unused options, or descriptive details), "
             "but must be mathematically and logically irrelevant to the specific question asked. \n"
             "**Output ONLY the rewritten problem text directly.**\n\n"
@@ -148,7 +151,7 @@ class RayDRPOTrainer(RayPPOTrainer):
             "You are an expert in designing mathematical problems. Your objective is to create a challenging problem variant "
             "by combining two techniques: Irrelevant Context Injection and Linguistic Rephrasing.\n\n"
             "[TASK]\n"
-            "Given the ORIGINAL_PROBLEM and ORIGINAL_ANSWER below, produce a AUGMENTED_PROBLEM. You must perform two actions simultaneously:\n"
+            "Given the ORIGINAL_PROBLEM and ORIGINAL_ANSWER below, produce a REWRITTEN_PROBLEM. You must perform two actions simultaneously:\n"
             "1. INJECT irrelevant context: Add additional context. The added context should appear topically related (e.g., alternative unused options, or descriptive details), but must be mathematically and logically irrelevant to the specific problem asked.\n"
             "2. REPHRASE the core mathematical statement: Change sentence structure, vocabulary, tone, or formatting while keeping the logic and values identical.\n"
             "**Output ONLY the rewritten problem text directly.**\n\n"

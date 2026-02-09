@@ -8,7 +8,9 @@ defaults:
 
 trainer:
   project_name: verl-drpo
-  type: drpo
+
+algorithm:
+  max_iter: 5
 
 client:
   mode: api
